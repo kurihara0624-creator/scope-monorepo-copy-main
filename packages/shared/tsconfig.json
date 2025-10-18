@@ -1,0 +1,25 @@
+// packages/shared/tsconfig.json
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "lib": ["DOM", "ESNext"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "moduleResolution": "bundler",
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+
+    /* Project References に必須のオプション */
+    "composite": true,      // 他のプロジェクトから参照されるために必須
+    "declaration": true,      // 型定義ファイルを生成する
+    "declarationMap": true,
+    "sourceMap": true,
+
+    /* Vite環境変数の型定義 */
+    "types": ["vite/client"]
+  },
+  "include": ["src", "src/api/firebase.ts", "vite-env.d.ts"], // "src" フォルダの中身だけを対象にする
+  "exclude": ["node_modules", "dist"]
+}

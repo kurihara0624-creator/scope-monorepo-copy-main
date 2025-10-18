@@ -1,0 +1,36 @@
+{
+"compilerOptions": {
+  // --- ここから上は既存の設定 ---
+  "tsBuildInfoFile": "node_modules_old/.tmp/tsconfig.app.tsbuildinfo",
+  "target": "ES2022",
+  "useDefineForClassFields": true,
+  "lib": ["ES2022", "DOM", "DOM.Iterable"],
+  "module": "ESNext",
+
+  /* Bundler mode */
+  "moduleResolution": "bundler",
+  "allowImportingTsExtensions": true,
+  "verbatimModuleSyntax": true,
+  "moduleDetection": "force",
+  "noEmit": true,
+  "jsx": "react-jsx",
+
+  /* Linter Checks */
+  "strict": true,
+  "noUnusedLocals": true,
+  "noUnusedParameters": true,
+  "noFallthroughCasesInSwitch": true,
+  "noUncheckedIndexedAccess": true,
+
+  /* Aliases for Mindmap */
+  "skipLibCheck": true,
+  // --- ★ここから下を追記します ---
+  "baseUrl": ".",
+  "paths": {
+    "@myorg/shared/*": ["../packages/shared/src/*"]
+  },
+  "types": ["vite/client"]
+  // --- ★追記はここまで ---
+}, // ← このカンマは元からあるはずです
+  "include": ["src", "vite-env.d.ts"]
+}

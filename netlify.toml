@@ -1,0 +1,24 @@
+# ===================================================================
+# Netlify ビルド設定 for モノレポ
+# ===================================================================
+
+[build]
+  # command:
+  # 1. まず、yarnでプロジェクト全体の依存関係をインストール
+  # 2. 次に、yarnのワークスペース機能で全ワークスペースをビルド
+  command = "yarn install && yarn workspaces run build"
+
+  # publish: 公開するフォルダのパス
+  publish = "web-app/dist"
+  # Netlify Functions の配置ディレクトリ
+  functions = "netlify/functions"
+
+[build.environment]
+  # NODE_VERSION: Node.jsのバージョンを指定
+  NODE_VERSION = "18"
+
+  # CI: Netlifyの自動インストール機能を抑制し、commandを完全に制御する
+  CI = "false"
+
+  # Force Yarn during install
+  NETLIFY_USE_YARN = "true"

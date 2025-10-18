@@ -1,0 +1,8 @@
+{
+  "projects": {
+    "default": "scope-app-v2",
+    "copy": "scope-copy"
+  },
+  "targets": {},
+  "etags": {}
+}

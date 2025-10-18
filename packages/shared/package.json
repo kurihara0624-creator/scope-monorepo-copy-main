@@ -1,0 +1,46 @@
+﻿{
+  "name": "@myorg/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./api/firebase": "./src/api/firebase.ts",
+    "./components/Section": "./src/components/Section.tsx",
+    "./components/ThemeGachaModal": "./src/components/ThemeGachaModal.tsx",
+    "./components/CunningPaperModal": "./src/components/CunningPaperModal.tsx",
+    "./components/MindmapSection": "./src/components/MindmapSection.tsx",
+    "./components/MindmapDisplay": "./src/components/MindmapDisplay.tsx",
+    "./components/MindmapModal": "./src/components/MindmapModal.tsx",
+    "./components/StopConfirmationModal": "./src/components/StopConfirmationModal.tsx",
+    "./components/Layout": "./src/components/Layout.tsx",
+    "./hooks/useAuth": "./src/hooks/useAuth.tsx",
+    "./types": "./src/types/index.ts",
+    "./components/*": "./src/components/*.tsx"
+  },
+  "dependencies": {
+    "lucide-react": "^0.334.0",
+    "react-router-dom": "^6.22.1",
+    "mermaid": "^10.9.0"
+  },
+  "peerDependencies": {
+    "firebase": "^10.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/mermaid": "^8.2.9",
+    "@types/react": "^18.2.56",
+    "@types/react-dom": "^18.2.19",
+    "react-dom": "^18.2.0",
+    "typescript": "^5.0.2",
+    "@types/dompurify": "^3.0.5",
+    "@types/d3": "^7.4.3",
+    "vite": "^5.1.4"
+  }
+}

@@ -1,0 +1,60 @@
+// --- firestore.rules ---
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- usersコレクション（ユーザー名簿）に対するルール ---
+    match /users/{userId} {
+      // 自分の情報：読み取り、更新、削除を許可
+      allow read, update, delete: if request.auth.uid == userId;
+      // 新規作成：ログインしていれば誰でも自分のユーザーデータを作成できる
+      allow create: if request.auth.uid != null;
+      
+      // 他人の情報：「同じチームのメンバー」なら読み取り(get)だけ許可
+      allow get: if isSignedIn() && isSameTeam(userId);
+    }
+
+    // --- one-on-onesコレクション（1on1記録）に対するルール ---
+    match /one-on-ones/{oneOnOneId} {
+      // 1on1の参加者（マネージャーかメンバー）だけが読み書きできる
+      allow read: if canAccessSession();
+      allow update, delete: if canAccessSession() && !isCompletedSession();
+      // 新規作成：ログインしていれば誰でも作成できる
+      allow create: if isSignedIn();
+
+      function canAccessSession() {
+        return isSignedIn() && (resource.data.managerId == request.auth.uid || resource.data.memberId == request.auth.uid);
+      }
+
+      function isCompletedSession() {
+        return resource.data.status == 'completed';
+      }
+    }
+
+
+    // --- 門番が使う便利な道具（ヘルパー関数） ---
+
+    // 「ログインしていますか？」をチェックする関数
+    function isSignedIn() {
+      return request.auth.uid != null;
+    }
+
+    // 社員ID(userId)から、その人のプロフィール情報を取得する関数
+    function getUserData(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data;
+    }
+
+    // 「リクエスト主と、見たい相手(targetUserId)が同じチームか？」をチェックする関数
+    function isSameTeam(targetUserId) {
+      // 1. リクエスト主のチームIDを取得
+      let currentUserTeamId = getUserData(request.auth.uid).teamId;
+      // 2. 見たい相手のチームIDを取得
+      let targetUserTeamId = getUserData(targetUserId).teamId;
+
+      // 3. どちらのチームIDも存在し、かつ二つが一致する場合のみ「True (OK)」を返す
+      return currentUserTeamId != null && currentUserTeamId == targetUserTeamId;
+    }
+  }
+}
