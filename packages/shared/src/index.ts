@@ -1,6 +1,2 @@
-export * from "./api/firebase";
-export * from "./hooks/useAuth";
-export * from "./hooks/useTeamMembers";
-export * from "./hooks/useTeamChangeRequests";
-export * from "./types";
+export { default as MindmapDisplay } from "./components/MindmapDisplay";
 export * from "./utils/geminiProxy";

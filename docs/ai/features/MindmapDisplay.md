@@ -1,130 +1,73 @@
-機能仕様 MindmapDisplay と周辺機能（2025年版）
-1. 概要
-本ドキュメントは、Mermaid 形式の mindmap を描画する共通 UI コンポーネント `MindmapDisplay` と、その親コンポーネント `MindmapSection` の振る舞い／データフローを整理したもの。OneOnOnePage で実行される 1on1 セッション中に、音声認識結果から AI（Gemini 系モデル）を活用して mindmap を生成・可視化する仕組みを扱う。
+# MindmapDisplay と関連ユーティリティ
 
-役割整理
-- MindmapDisplay: Mermaid mindmap テキストを受け取り、SVG に描画する表示専用コンポーネント。
-- MindmapSection: 音声認識ログ（transcript）を管理し、Gemini API を呼び出して mindmapText を生成する父コンポーネント。生成後は MindmapDisplay へ chart prop として受け渡す。
-- OneOnOnePage: Active モードでは MindmapSection を編集可能として組み込み、Completed モードでは読み取り専用として表示する。
+このドキュメントでは、Scope Mindmap の中核コンポーネントである `MindmapDisplay` と、Gemini 応答を Mermaid へ変換するユーティリティについて解説します。
 
-2. 関連コンポーネントツリーとデータフロー
+## コンポーネントツリー
+
 ```
-OneOnOnePage.tsx (祖父)
-└─ MindmapSection.tsx (親)
-   └─ MindmapDisplay.tsx (子)
+MindmapPage.tsx
+└─ MindmapDisplay (packages/shared)
 ```
 
-データフロー概略
-```mermaid
-sequenceDiagram
-    participant User as ユーザー
-    participant OOO as OneOnOnePage
-    participant MSS as MindmapSection
-    participant GEM as Gemini API
-    participant MMD as MindmapDisplay
+- `MindmapPage` がユーザー入力と Gemini へのリクエストを担い、生成された Mermaid 文字列を `MindmapDisplay` へ渡します。
+- `MindmapDisplay` は表示専用で、状態管理やネットワークアクセスは行いません。
 
-    User->>OOO: 会話/操作（音声認識開始）
-    OOO->>MSS: editableTranscript, status, options
-    MSS->>GEM: Gemini 2.5 Flash へ要約/構造化プロンプト送信
-    GEM-->>MSS: mindmap JSON / Mermaid テキスト案
-    MSS->>MMD: chart (Mermaid mindmapText), rerenderKey
-    MMD->>MMD: Mermaid で SVG 描画
-    Note over MMD: Completed status の場合は表示のみ（操作不可）
+## MindmapDisplay の役割
+
+ファイル: `packages/shared/src/components/MindmapDisplay.tsx`
+
+- `mermaid` ライブラリを初期化し、受け取った `chart` 文字列を SVG にレンダリングします。
+- レンダリングに失敗した場合は、Mermaid 構文の確認を促すエラーメッセージを DOM に直接描画します。
+- `rerenderKey` を変更すると強制的に再描画が走るため、同一チャートを再評価したいケースに利用できます。
+
+## Gemini 応答の変換フロー
+
+```
+generateMindmapFromText (packages/shared/src/utils/mindmap.ts)
+    ├─ promptTemplate(): Gemini に渡す指示文を生成
+    ├─ callGeminiProxy(): Netlify Functions 経由で Gemini API を呼び出し
+    ├─ extractFirstJsonObject(): 応答から最初の JSON オブジェクトを抽出
+    ├─ buildMermaidChart(): MindmapSchema → Mermaid `graph LR` 文字列に変換
+    └─ return { chart, schema, modelName, apiVersion }
 ```
 
-3. MindmapDisplay コンポーネント仕様
-Props
-| Prop | 型 | 必須 | 説明 |
-| --- | --- | --- | --- |
-| `chart` | string | 必須 | Mermaid mindmap 構文。 |
-| `rerenderKey` | number | 任意 | Mermaid レンダリングを強制再実行するためのキー。 |
+### MindmapSchema
 
-機能詳細
-- `mermaid` ライブラリ（v10 系）を利用し、`chart` を SVG に変換して描画。
-- `chart` の変更時に再描画を実施。`rerenderKey` が増分された場合も再描画を行う。
-- Mermaid の構文エラー発生時は catch して警告メッセージを表示し、既存描画を保持する。
-- Tailwind CSS を用いたレイアウト調整を許容（背景色、枠線などは親から受け取ることを前提）。
-
-4. MindmapSection の役割
-MindmapDisplay を活用するため、以下の業務ロジックを担当する。
-
-- 音声認識データ管理: `react-speech-recognition` から取得した transcript を `editableTranscript` にバインド。
-- Gemini API 呼び出し: `@google/generative-ai` を通じて Gemini 2.5 Flash（フォールバックとして 1.5 Flash）を優先利用。モデルは `VITE_GEMINI_MODEL_OVERRIDE` でカスタマイズ可能。
-- プロンプト戦略: 会話内容から「テーマ」「事実・トピック」「感情・価値観」「次のアクション」を抽出する JSON を生成 → Mermaid mindmapText へ変換。
-- 更新ロジック: 3 秒デバウンスで transcript 変更を検知し自動更新。ユーザーが「マインドマップ更新」ボタンを押した場合は即時更新。
-- モーダル制御: MindmapDisplay の拡大表示（`MindmapModal`）を管理。
-- 状態管理: `isGeneratingMap`, `isAutoUpdating` などを UI に反映。
-
-Completed モードの制御
-- OneOnOnePage から `status` を受け取り、`status === "completed"` の場合は以下を実施。
-  - 音声認識の開始・停止ボタン、AI 再生成ボタンを非表示。
-  - Firestore への更新イベントをクライアント側でも抑止（サーバールールと二重防御）。
-  - MindmapDisplay は最新の mindmapText を表示するが、編集系操作は提供しない。
-
-5. 関連データモデル（`packages/shared/src/types/index.ts` 抜粋）
 ```ts
-export interface OneOnOneDoc {
-  id: string;
-  managerId: string;
-  managerName: string;
-  memberId: string;
-  memberName: string;
-  createdAt: Timestamp;
-  sessionId?: string;
-  status?: "active" | "completed";
-  mindmapText?: string;
-  mindmap?: { nodes: unknown[]; links: unknown[] };
-  transcript?: string;
-  summaryPoints?: string;
-  summaryNextActions?: string;
-  reflection?: string;
-  positiveMemo?: string;
+export interface MindmapSchema {
+  rootTopic: string;
+  categories?: MindmapCategory[];
+  emotions?: string[];
+  actions?: string[];
+}
+
+export interface MindmapCategory {
+  name: string;
+  children?: MindmapCategory[];
 }
 ```
 
-Firestore 側では `status` により更新可否が決まる。`status === "completed"` の場合は Security Rules で update/delete を拒否する。
+- `rootTopic`: マインドマップの中心に配置されるテーマ。
+- `categories`: 具体的な話題や出来事を表すノード階層。
+- `emotions`: 会話で特に顕在化した感情・価値観。
+- `actions`: 得意な行動やモチベーションの源泉を動詞で表現したもの。
 
-6. 処理フロー詳細
-1. OneOnOnePage が Firestore からセッションを購読し、`status` を判定。
-2. Active の場合、MindmapSection が transcript を監視し、Gemini へリクエスト → mindmapText を生成。
-3. mindmapText を `MindmapDisplay` に渡し、Mermaid で可視化。マインドマップ更新時は `setDoc`（merge）で Firestore に保存。
-4. Completed の場合、MindmapSection は描画のみ。更新系 UI は非表示となり、Firestore ルールにもより更新は拒否される。
+### Mermaid の構造
 
-コードスニペット（省略版）
-```tsx
-// packages/shared/src/components/MindmapSection.tsx
-const MODEL_CANDIDATES = import.meta.env.VITE_GEMINI_MODEL_OVERRIDE?.split(",") ?? [
-  "gemini-2.5-flash",
-  "gemini-1.5-flash-latest",
-  "gemini-1.5-flash",
-];
+`buildMermaidChart()` は以下のルールでノードを構成します。
 
-export function MindmapSection(props: MindmapSectionProps) {
-  const { editableTranscript, status, initialMindmapText, onMindmapUpdate } = props;
-  const [mindmapText, setMindmapText] = useState(initialMindmapText ?? "");
-  const [isGeneratingMap, setIsGeneratingMap] = useState(false);
+- `graph LR` を基盤に、`subgraph` を使って「感情・価値観」「得意な行動」「事実とトピック」を区画化。
+- 各配列の要素にはスタイルクラス（`category1Style` 〜 `category4Style`）を順番に割り当て、色分けしたノードとして描画。
+- ルートトピックには `rootStyle` を適用し、視覚的に強調されるように設定。
+- 空文字や null が混入している場合はスキップすることで、Mermaid の構文エラーを防止。
 
-  const generateMindmap = useCallback(async () => {
-    if (status === "completed") return;
-    // Gemini 呼び出し → mindmapText 更新処理（略）
-  }, [editableTranscript, status]);
+### エラーハンドリング
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (status === "active") {
-        void generateMindmap();
-      }
-    }, 3000);
-    return () => clearTimeout(timer);
-  }, [editableTranscript, status, generateMindmap]);
+- Gemini 応答に JSON が含まれない場合は例外を投げ、呼び出し元（`MindmapPage`）でユーザー向けエラーメッセージに変換します。
+- Mermaid 変換時に不正な文字が含まれた場合は `sanitize()` でダブルクォートや改行をエスケープし、最低限の安全性を確保します。
 
-  return (
-    <Section title="マインドマップ">
-      <MindmapDisplay chart={mindmapText} rerenderKey={mindmapText.length} />
-      {status === "active" && <UpdateButton onClick={generateMindmap} disabled={isGeneratingMap} />}
-    </Section>
-  );
-}
-```
+## 今後の拡張案
 
-> TODO: モデルごとのトークンコストとレスポンス SLA を整理し、ビジネス要件に応じたスロットリング戦略を検討する。
+- `schema` をブラウザの IndexedDB に保存し、再描画用の履歴を提供する。
+- Mermaid ではなく D3 や Graphviz を利用した別視覚化モードを追加する。
+- `generateMindmapFromText` の返却値にトークン消費量などのメタデータを付与し、コスト監視を行う。

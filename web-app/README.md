@@ -1,69 +1,44 @@
-# React + TypeScript + Vite
+# Scope Mindmap (web-app)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Scope Mindmap は、テキストを入力して Gemini に要約・構造化させ、その結果を Mermaid でマインドマップとして描画するシンプルな SPA です。Firebase や認証機能は削除されており、Gemini プロキシを通じたマインドマップ生成に特化しています。
 
-Currently, two official plugins are available:
+## 主な機能
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- テキストエリアに会話メモやアイデアを入力
+- 「マインドマップを生成」ボタンで Netlify Functions を介して Gemini にリクエスト
+- 取得した JSON を Mermaid `graph LR` 形式へ変換し、SVG として表示
+- 生成中のローディング表示・エラー表示、利用モデルのログ出力
 
-## Expanding the ESLint configuration
+## 開発手順
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+```bash
+# 依存関係のインストール
+yarn install
 
-```js
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+# 共有パッケージの型チェック（必要に応じて）
+yarn build -w packages/shared
 
-      // Remove tseslint.configs.recommended and replace with this
-      ...tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      ...tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      ...tseslint.configs.stylisticTypeChecked,
+# Netlify Functions を含めて起動
+netlify dev
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+# もしくはフロントエンドのみ
+yarn dev -w web-app
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Netlify Functions を経由しない場合、`VITE_GEMINI_PROXY_ENDPOINT` に任意のエンドポイントを指定してください。
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## ビルド
 
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+yarn build -w web-app
 ```
+
+成果物は `web-app/dist` に出力され、Netlify により公開されます。Function 部分は `netlify/functions/gemini-proxy.js` を参照してください。
+
+## 環境変数のポイント
+
+- `GEMINI_API_KEY`: Netlify 側でのみ設定する。ブラウザから参照しない。
+- `GEMINI_MODEL_OVERRIDE`: 生成に利用するモデルをカンマ区切りで指定可能。
+- `VITE_GEMINI_PROXY_ENDPOINT`: ローカル開発でプロキシ URL を切り替えたい場合に使用。
+
+詳細は `docs/ai/AIStudioOps.md` を参照してください。

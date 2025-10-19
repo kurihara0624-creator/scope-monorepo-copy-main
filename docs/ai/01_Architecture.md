@@ -1,151 +1,99 @@
-アプリケーション全体仕様（AI開発用コンテキスト - 2025年版）
-1. 概要
-Scope Monorepo（以下、scope-monorepo）は、1on1 セッションの準備・実施・振り返りを支援する Web アプリケーションであり、PoC フェーズの検証環境として運用している。2025年10月時点の主要スタックと運用方針は以下の通り。
+# Scope Mindmap アーキテクチャ概要
 
-技術スタック（抜粋）
-- 構成: Yarn Workspaces を活用したモノレポ構成
-- フロントエンド: React 18 + Vite + TypeScript 5（strict）+ Tailwind CSS/PostCSS
-- ルーティング: React Router 6
-- バックエンド/BaaS: Firebase Authentication, Cloud Firestore
-- ホスティング: Netlify（main ブランチ自動デプロイ）
-- アイコン/ユーティリティ: lucide-react, react-speech-recognition, mermaid など
-- AI 連携: @google/generative-ai（Gemini 系モデル）
+Scope Mindmap は「テキスト入力 → Gemini で構造化 → Mermaid で可視化」をワンストップで提供する単機能アプリです。React 18 + Vite + TypeScript をベースに、Netlify Functions 経由で Gemini API を呼び出します。Firestore や認証は完全に排除されており、ユーザーの入力テキストと生成結果はすべてクライアントメモリ内で完結します。
 
-開発運用
-- Cursor（Codex CLI）を用いた「抜け漏れを減らすマスタープロンプト」方式でのタスクドリブン開発を採用。差分生成・レビュー工程は Codex CLI を経由し、Pull Request ベースで管理する。
-- PoC 中は Firebase Security Rules を最小限の制約に留め、Completed セッションの上書き防止などクリティカルな制約のみを適用。将来拡張は TODO 管理とする（詳細は第4章）。
+## 技術スタック
 
-アプリケーション全体構成図（概念図）
-```mermaid
-flowchart LR
-    subgraph Client[Web Client (React 18 + Tailwind)]
-        Dashboard[DashboardPage\nActive/Completed Tab]
-        OneOnOne[OneOnOnePage\nMindmapSection]
-        Shared[Shared Components & Hooks]
-    end
-    subgraph Firebase[Firebase]
-        Auth[Authentication]
-        Firestore[(Cloud Firestore)]
-    end
-    subgraph External[External Services]
-        Gemini[(Gemini API)]
-    end
+- フロントエンド: React 18, TypeScript 5, Vite, Tailwind 利用可能（デザインは主にインラインスタイル）
+- 共有ライブラリ: `packages/shared`（Mermaid 表示コンポーネントと Gemini プロキシユーティリティを提供）
+- バックエンド: なし（Netlify Functions 上の Gemini プロキシのみ）
+- デプロイ: Netlify（`netlify/functions/gemini-proxy.js` が Google AI Studio の API キーを仲介）
+- AI モデル: Gemini 2.5 Flash を既定に、`VITE_GEMINI_MODEL_OVERRIDE` で上書き可能
 
-    Client --> Auth
-    Client --> Firestore
-    OneOnOne --> Gemini
-    Firestore -->|Subscriptions| Dashboard
-```
-
-2. ディレクトリ構造とパッケージ間連携
-scope-monorepo/package.json の workspaces 設定および tsconfig.base.json の paths 設定に基づき、以下の構造と連携ルールを採用する。
+## ディレクトリ構成（抜粋）
 
 ```
 scope-monorepo/
-├── docs/                     # 設計書・運用ドキュメント
-├── packages/
-│   └── shared/               # 共有ライブラリ（@myorg/shared）
-│       ├── src/
-│       │   ├── api/          # Firebase SDK ラッパー
-│       │   ├── components/   # 再利用 UI
-│       │   ├── hooks/        # 共通 Hooks
-│       │   └── types/        # 型定義
-│       └── package.json
-├── web-app/                  # メイン SPA
+├── web-app/                     # Scope Mindmap の SPA 本体
 │   ├── src/
-│   │   ├── components/
-│   │   ├── pages/
-│   │   ├── shared/           # ページ固有のユーティリティ
-│   │   └── main.tsx 等
+│   │   ├── App.tsx              # React Router のルート定義（`/` のみ）
+│   │   ├── main.tsx             # Vite エントリーポイント
+│   │   └── pages/
+│   │       └── MindmapPage.tsx  # 入力フォームと Mindmap 表示を担う画面
 │   └── package.json
-├── package.json
-└── tsconfig.base.json
+├── packages/
+│   └── shared/
+│       ├── src/
+│       │   ├── components/
+│       │   │   └── MindmapDisplay.tsx  # Mermaid レンダリング専用コンポーネント
+│       │   └── utils/
+│       │       ├── geminiProxy.ts      # Netlify Functions を叩く fetch ラッパー
+│       │       └── mindmap.ts          # Gemini 応答 JSON → Mermaid 変換ロジック
+│       └── package.json
+├── netlify/
+│   └── functions/
+│       └── gemini-proxy.js       # Google Generative Language API へのフォワーダー
+└── docs/ai/                      # 本ドキュメント群
 ```
 
-連携ルール
-- `@myorg/shared/*` エイリアスで packages/shared のモジュールにアクセスする。
-- 共有ロジック・型・UI は shared に集約し、web-app から利用する。
-- Firebase へのアクセスは `@myorg/shared/api/firebase` を通じて統一する。
+## 画面とルーティング
 
-3. 画面一覧とルーティング（App.tsxより）
-認証ガード（PrivateRoute）により、未認証ユーザーは `/login` にリダイレクトされる。2025年版の主要ルートは以下。
+- `/`: `MindmapPage.tsx`
+  - テキストエリアと生成ボタン、ローディング表示、エラー表示
+  - 生成結果は `MindmapDisplay` に渡され、Mermaid 描画が行われる
+  - 認証や Firestore 連携は存在しない
+- 404 含むその他のパスも `MindmapPage` にフォールバックする簡易ルーティング構成
 
-| パス | コンポーネント | 認証 | 概要 |
-| --- | --- | --- | --- |
-| `/login` | `LoginPage.tsx` | 不要 | Google Auth ベースのログイン画面。 |
-| `/` | `DashboardPage.tsx` | 必須 | 1on1 セッション一覧と Active / Completed タブ、開始動線、SessionHistory を提供。 |
-| `/1on1/new` | `OneOnOnePage.tsx` | 必須 | 新規 1on1 セッションのセットアップ（MindmapSection 初期化）。 |
-| `/1on1/:id` | `OneOnOnePage.tsx` | 必須 | 既存セッションの閲覧・編集。status に応じて UI 制御（completed は読み取り専用）。 |
-| `/settings/profile` | `SettingsProfile.tsx` | 必須 | プロフィール編集。 |
-| `/admin/team-requests` | `AdminTeamRequests.tsx` | 必須（管理者） | チーム変更申請管理。 |
+## データフロー
 
-ルーティングは `web-app/src/App.tsx` と `components/AppLayout.tsx` で実装し、レイアウト／ナビゲーションを共通化する。Dashboard では Firestore のリアルタイム購読を利用し、Active/Completed を単一購読で分岐して表示する。Completed タブでは SessionHistory 以外の開始動線を非表示とし、Completed セッションからの再開を抑止する。
+```mermaid
+sequenceDiagram
+    participant User as ユーザー
+    participant SPA as Scope Mindmap (React)
+    participant Func as Netlify Function
+    participant Gemini as Gemini API
 
-4. データモデル（Firestore コレクション構造）
-PoC 時点で採用している主要ドキュメント構造は以下。Timestamp は Firebase 提供の型を利用。
+    User->>SPA: 入力テキストを送信
+    SPA->>Func: `generateMindmapFromText`（prompt + オプション）
+    Func->>Gemini: `generateContent` API を呼び出し
+    Gemini-->>Func: Mindmap JSON テキストを返却
+    Func-->>SPA: JSON + モデル情報を返信
+    SPA->>SPA: Mermaid チャートへ変換
+    SPA->>User: SVG でマインドマップを表示
+```
 
-#### users コレクション
-| フィールド | 型 | 説明 |
+## 主要モジュール
+
+- `web-app/src/pages/MindmapPage.tsx`
+  - ユーザー入力状態（`inputText`）、生成結果（`chart`）、ローディングとエラー状態を保持
+  - `generateMindmapFromText` を呼び出して Mermaid 文字列を取得
+  - 結果を `MindmapDisplay` へ渡し SVG を描画
+- `packages/shared/src/utils/mindmap.ts`
+  - Gemini プロンプトの生成と応答 JSON の検証を行う
+  - `MindmapSchema`（rootTopic, categories, emotions, actions）を Mermaid の `graph LR` 記法に変換
+  - 変換結果と呼び出しに利用したモデル情報を返却
+- `packages/shared/src/components/MindmapDisplay.tsx`
+  - Mermaid のインスタンスを初期化し、SVG に変換して DOM へ埋め込む
+  - 変換失敗時はエラーメッセージを描画
+- `netlify/functions/gemini-proxy.js`
+  - ブラウザから API キーを隠蔽し、モデル切り替えやリトライ制御を担う
+  - 429/503 などの応答をハンドリングしてリトライ、成功時はテキストのみ抽出する
+
+## 環境変数
+
+| 名前 | 説明 | スコープ |
 | --- | --- | --- |
-| `uid` | string | Firebase Authentication UID（ドキュメント ID と一致）。 |
-| `displayName` | string \| null | 表示名。 |
-| `email` | string \| null | メールアドレス。 |
-| `photoURL` | string \| null | プロフィール画像 URL。 |
-| `lastLoginAt` | Timestamp | 最終ログイン時刻。 |
-| `teamId` | string \| null | 所属チーム ID（PoC では任意）。 |
+| `GEMINI_API_KEY` | Netlify Functions で使用する Google AI Studio のキー | サーバー (Netlify) |
+| `VITE_GEMINI_MODEL_OVERRIDE` | カンマ区切りで指定したモデルを優先的に利用 | ブラウザ & Functions |
+| `VITE_GEMINI_PROXY_ENDPOINT` | プロキシ URL を上書きしたい場合に指定 | ブラウザ |
 
-#### one-on-ones コレクション
-| フィールド | 型 | 説明 |
-| --- | --- | --- |
-| `id` | string | ドキュメント ID。 |
-| `sessionId` | string | UI で参照するセッション ID（ドキュメント ID と同値）。 |
-| `status` | `"active"` \| `"completed"` | セッション状態。Completed は読み取り専用。 |
-| `managerId`, `managerName`, `managerPhotoURL` | string | マネージャー情報。 |
-| `memberId`, `memberName` | string | メンバー情報（PoC では ID が空のケースあり）。 |
-| `createdAt` | Timestamp | 作成日時。 |
-| `agenda`, `transcript`, `summaryPoints`, `summaryNextActions`, `reflection`, `positiveMemo` | 任意フィールド | 1on1 の内容。 |
-| `mindmapText`, `mindmap` | string / JSON | Mermaid mindmap 描画用データ。 |
-| `checkin` | { mood: number, focus: number } | セッション開始時のチェックイン値。 |
+その他の Firebase 関連環境変数や設定ファイルは削除済みです。
 
-PoC Security Rules（`web-app/firestore.rules` 抜粋）
-```
-match /one-on-ones/{oneOnOneId} {
-  allow read: if isSignedIn() && (resource.data.managerId == request.auth.uid || resource.data.memberId == request.auth.uid);
-  allow update, delete: if isSignedIn()
-    && (resource.data.managerId == request.auth.uid || resource.data.memberId == request.auth.uid)
-    && resource.data.status != 'completed';
-  allow create: if isSignedIn();
-}
-```
+## 開発フローのポイント
 
-> TODO: チーム単位でのアクセス制御（同一 teamId のみ閲覧可）や監査ログ要件を踏まえたルール拡張を検討する。
+1. `yarn install`
+2. `yarn dev -w web-app` で開発サーバーを起動
+3. 入力テキストを用意し、マインドマップが生成されることを確認
+4. 依存する共有ロジックを変更した場合は `yarn build -w packages/shared` で型エラーを検出
 
-5. API 仕様（Firebase 連携）
-`packages/shared/src/api/firebase.ts` が Firebase SDK を初期化し、以下の関数・参照をエクスポートする。
-
-- `auth`, `googleProvider`: Firebase Authentication 用ラッパー。
-- `db`, `oneOnOnesCollection`, `usersCollection`: Firestore 参照。
-- `addDoc`, `setDoc`, `onSnapshot` などのユーティリティ関数を再エクスポートし、web-app 側からのインポートを一本化。
-- Netlify にデプロイされた環境でも、`.env` に格納した Firebase 設定を Vite 経由で注入。
-
-Firestore との通信は以下のパターンに整理される。
-1. DashboardPage: `onSnapshot(oneOnOnesCollection, …)` によりマネージャー視点のセッションを取得し、`status` で Active/Completed を分岐。
-2. OneOnOnePage: セッション単体を購読し、UI ステータス（編集可否）を `status` で制御。
-3. MindmapSection: `setDoc`（merge）で AI 生成結果を保存。Completed 状態ではサーバールール／クライアント双方で保存を抑止。
-
-6. 主要な共通ロジック
-- 認証（`useAuth.tsx`）: AuthProvider がアプリ全体にユーザー情報を供給。Google アカウントでのログイン、プロフィール同期、チーム ID の設定を担う。
-- セッション管理（`useTeamMembers`, Dashboard フック群）: Firestore からの購読結果を正規化し、Active/Completed タブで再利用。
-- Mindmap 生成: `MindmapSection` が Gemini API を呼び出し、Mermaid mindmap を生成。`MindmapDisplay` が SVG 化して表示。
-- プロンプト運用: 「抜け漏れを減らすマスタープロンプト」をベースに、タスク開始時に「把握計画→実装計画→疑問点→差分適用」の手順を Codex CLI 上で実施。レビューコメントや TODO は Markdown に明示する。
-
-7. TypeScript 設定（tsconfig.base.json）
-- `"target": "ESNext"`, `"module": "ESNext"`, `"moduleResolution": "bundler"` を採用し、Vite の最適化に合わせる。
-- `"jsx": "react-jsx"` により新しい JSX トランスフォームを使用。
-- `"strict": true` をベースに、null 安全性を確保。
-- `"paths": { "@myorg/shared/*": ["packages/shared/src/*"] }` を設定し、共有モジュールへのアクセスを簡略化。
-- 補助設定: `"types": ["vite/client"]` など Vite 依存を含む型定義を読み込む。
-
-補足
-- Tailwind/PostCSS の設定は `web-app/postcss.config.cjs`, `tailwind.config.cjs` に集約。コンポーネントレベルでは `@myorg/shared` の共通スタイルと併用する。
-- Netlify デプロイは `netlify.toml` にてビルドコマンド `yarn build`、出力先 `web-app/dist` を指定。Firebase API Key 等は Netlify 環境変数で管理する。
+テキストを外部に送信する前提のため、機密情報が含まれないよう注意してください。
