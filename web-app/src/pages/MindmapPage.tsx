@@ -79,10 +79,16 @@ const buildMermaid = (schema: MindmapSchema): string => {
   const topContainerId = `Top${nodeCounter++}`;
   lines.push(`    subgraph ${topContainerId}`);
 
-  const attachKeywordCluster = (keywords: string[], title: string, rootLabel: string, className: string) => {
+  const attachKeywordCluster = (
+    keywords: string[],
+    clusterId: string,
+    label: string,
+    rootLabel: string,
+    className: string,
+  ) => {
     if (!keywords.length) return;
     const rootId = nextId();
-    lines.push(`        subgraph ${title}`);
+    lines.push(`        subgraph ${clusterId}["${sanitize(label)}"]`);
     lines.push("            direction LR");
     lines.push(`            ${rootId}(["${sanitize(rootLabel)}"])`);
     keywords.forEach((keyword, index) => {
@@ -96,14 +102,26 @@ const buildMermaid = (schema: MindmapSchema): string => {
     lines.push("        end");
   };
 
-  attachKeywordCluster(schema.emotions, "感情・価値観の発見", "特に響いた感情", "emotionRootStyle");
-  attachKeywordCluster(schema.actions, "得意な行動と原動力", "行動キーワード", "actionRootStyle");
+  attachKeywordCluster(
+    schema.emotions,
+    "cluster_emotions",
+    "感情・価値観の発見",
+    "特に響いた感情",
+    "emotionRootStyle",
+  );
+  attachKeywordCluster(
+    schema.actions,
+    "cluster_actions",
+    "得意な行動と原動力",
+    "行動キーワード",
+    "actionRootStyle",
+  );
 
   lines.push("    end");
 
   if (schema.rootTopic.trim() && schema.categories.length) {
     const factRootId = nextId();
-    lines.push("    subgraph 事実とトピックの整理");
+    lines.push('    subgraph cluster_topics["事実とトピックの整理"]');
     lines.push("        direction LR");
     lines.push(`        ${factRootId}(["${sanitize(schema.rootTopic)}"])`);
 
